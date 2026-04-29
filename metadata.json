@@ -1,0 +1,6 @@
+{
+  "name": "Pizza Haven",
+  "description": "Authentic sourdough pizzas with real-time delivery tracking, online ordering, and a gourmet menu.",
+  "requestFramePermissions": ["geolocation"],
+  "majorCapabilities": []
+}
