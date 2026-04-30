@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
 import Navbar from './components/Navbar';
 import Hero from './components/Hero';
 import Menu from './components/Menu';
@@ -9,10 +10,11 @@ import ReviewSection from './components/ReviewSection';
 import ContactForm from './components/ContactForm';
 import PizzaGallery from './components/PizzaGallery';
 import SpecialOffers from './components/SpecialOffers';
+import Admin from './pages/Admin'; // Naya Admin page import
 import { MenuItem, Order, OrderStatus } from './types';
 import { auth, db } from './firebase';
 import { onAuthStateChanged, User } from 'firebase/auth';
-import { addDoc, collection, serverTimestamp } from 'firebase/firestore';
+import { addDoc, collection, serverTimestamp, getDocs } from 'firebase/firestore';
 import { handleFirestoreError, OperationType } from './lib/firestore-errors';
 
 export default function App() {
@@ -21,11 +23,25 @@ export default function App() {
   const [isCartOpen, setIsCartOpen] = useState(false);
   const [isOrdersOpen, setIsOrdersOpen] = useState(false);
   const [cart, setCart] = useState<{ item: MenuItem; quantity: number }[]>([]);
+  const [menuItems, setMenuItems] = useState<MenuItem[]>([]);
 
+  // Saharsa Database (Firestore) se Menu fetch karna
   useEffect(() => {
-    const unsub = onAuthStateChanged(auth, (u) => {
-      setUser(u);
-    });
+    const getMenu = async () => {
+      try {
+        const querySnapshot = await getDocs(collection(db, "pizza"));
+        const items = querySnapshot.docs.map(doc => ({ 
+          id: doc.id, 
+          ...doc.data() 
+        } as MenuItem));
+        setMenuItems(items);
+      } catch (error) {
+        console.error("Error fetching menu:", error);
+      }
+    };
+    getMenu();
+
+    const unsub = onAuthStateChanged(auth, (u) => setUser(u));
     return unsub;
   }, []);
 
@@ -41,15 +57,13 @@ export default function App() {
   };
 
   const updateQuantity = (id: string, delta: number) => {
-    setCart(prev => {
-      return prev.map(i => {
-        if (i.item.id === id) {
-          const nextQty = Math.max(0, i.quantity + delta);
-          return { ...i, quantity: nextQty };
-        }
-        return i;
-      }).filter(i => i.quantity > 0);
-    });
+    setCart(prev => prev.map(i => {
+      if (i.item.id === id) {
+        const nextQty = Math.max(0, i.quantity + delta);
+        return { ...i, quantity: nextQty };
+      }
+      return i;
+    }).filter(i => i.quantity > 0));
   };
 
   const handleCheckout = async () => {
@@ -57,7 +71,6 @@ export default function App() {
       setIsAuthOpen(true);
       return;
     }
-
     const subtotal = cart.reduce((sum, { item, quantity }) => sum + item.price * quantity, 0);
     const total = subtotal + 5.00;
 
@@ -73,9 +86,9 @@ export default function App() {
       total,
       createdAt: serverTimestamp(),
       deliveryLocation: {
-        address: '123 Main St, Pizza Town, PI 55555', // Mock address for now
-        lat: 40.7128,
-        lng: -74.0060
+        address: 'Gandhi Path, Saharsa', 
+        lat: 25.8835,
+        lng: 86.6006
       }
     };
 
@@ -90,59 +103,44 @@ export default function App() {
   };
 
   return (
-    <div className="min-h-screen bg-white selection:bg-orange-100 selection:text-orange-600 font-sans">
-      <Navbar 
-        cartCount={cart.reduce((sum, i) => sum + i.quantity, 0)}
-        onOpenCart={() => setIsCartOpen(true)}
-        onOpenAuth={() => setIsAuthOpen(true)}
-        onOpenOrders={() => setIsOrdersOpen(true)}
-        userName={user?.displayName}
-      />
-      
-      <main>
-        <Hero />
-        <SpecialOffers />
-        <Menu onAddToCart={addToCart} />
-        <PizzaGallery />
-        <ReviewSection />
-        <ContactForm />
-      </main>
-
-      <footer className="bg-gray-900 py-12 px-6 border-t border-white/5">
-        <div className="max-w-7xl mx-auto flex flex-col md:flex-row justify-between items-center gap-8">
-          <div className="flex items-center gap-2">
-            <span className="text-white text-xl font-black uppercase tracking-tighter">PizzaHaven</span>
-            <span className="text-gray-500 text-[10px] uppercase font-bold tracking-widest ml-4">© 2026 Genuine Sourdough</span>
-          </div>
-          <div className="flex gap-8 text-[10px] uppercase font-bold tracking-widest text-gray-500">
-            <a href="#" className="hover:text-orange-500 transition-colors">Privacy</a>
-            <a href="#" className="hover:text-orange-500 transition-colors">Terms</a>
-            <a href="#" className="hover:text-orange-500 transition-colors">Sitemap</a>
-          </div>
-        </div>
-      </footer>
-
-      <Cart 
-        isOpen={isCartOpen}
-        onClose={() => setIsCartOpen(false)}
-        items={cart}
-        onUpdateQuantity={updateQuantity}
-        onCheckout={handleCheckout}
-      />
-
-      <AuthModal 
-        isOpen={isAuthOpen}
-        onClose={() => setIsAuthOpen(false)}
-        user={user}
-      />
-
-      {user && (
-        <Orders 
-          isOpen={isOrdersOpen}
-          onClose={() => setIsOrdersOpen(false)}
-          userId={user.uid}
+    <Router>
+      <div className="min-h-screen bg-white selection:bg-orange-100 selection:text-orange-600 font-sans">
+        <Navbar 
+          cartCount={cart.reduce((sum, i) => sum + i.quantity, 0)}
+          onOpenCart={() => setIsCartOpen(true)}
+          onOpenAuth={() => setIsAuthOpen(true)}
+          onOpenOrders={() => setIsOrdersOpen(true)}
+          userName={user?.displayName}
         />
-      )}
-    </div>
+        
+        <Routes>
+          <Route path="/" element={
+            <main>
+              <Hero />
+              <SpecialOffers />
+              <Menu items={menuItems} onAddToCart={addToCart} />
+              <PizzaGallery />
+              <ReviewSection />
+              <ContactForm />
+            </main>
+          } />
+          <Route path="/admin" element={<Admin />} />
+        </Routes>
+
+        <footer className="bg-gray-900 py-12 px-6 border-t border-white/5">
+          <div className="max-w-7xl mx-auto flex flex-col md:flex-row justify-between items-center gap-8">
+            <div className="flex items-center gap-2">
+              <span className="text-white text-xl font-black uppercase tracking-tighter">PizzaHaven</span>
+              <span className="text-gray-500 text-[10px] uppercase font-bold tracking-widest ml-4">© 2026 Saharsa Branch</span>
+            </div>
+          </div>
+        </footer>
+
+        <Cart isOpen={isCartOpen} onClose={() => setIsCartOpen(false)} items={cart} onUpdateQuantity={updateQuantity} onCheckout={handleCheckout} />
+        <AuthModal isOpen={isAuthOpen} onClose={() => setIsAuthOpen(false)} user={user} />
+        {user && <Orders isOpen={isOrdersOpen} onClose={() => setIsOrdersOpen(false)} userId={user.uid} />}
+      </div>
+    </Router>
   );
-}
+    }
+                                                       
